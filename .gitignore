@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Bun
+# Note: we DO commit bun.lock (text format) for reproducible builds
+
+# Local env files
+.env
+.env.local
+.env*.local
+
+# Test / coverage
+coverage/
+*.lcov
+.nyc_output
+
+# Playwright
+playwright-report/
+test-results/
+
+# Dwell session output (local recordings + impressions)
+recordings/
+impressions/
+.dwell-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.history/
+
+# Logs
+logs/
+*.log
+bun-debug.log*
+npm-debug.log*
+
+# Cursor agent transcripts (local only)
+.cursor/transcripts/

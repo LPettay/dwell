@@ -1,0 +1,15 @@
+# Lefthook config — git hooks for Dwell.
+# https://github.com/evilmartians/lefthook
+#
+# Bypass with --no-verify only in emergencies. Document why in your commit
+# message if you do.
+
+pre-commit:
+  parallel: true
+  commands:
+    repo-checks:
+      run: bun run check
+      stage_fixed: false
+    typecheck:
+      glob: "**/*.ts"
+      run: bun run typecheck

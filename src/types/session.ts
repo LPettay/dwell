@@ -2,7 +2,16 @@ import { z } from "zod";
 
 export const InteractionEvent = z.object({
   t: z.number(),
-  phase: z.enum(["initial", "idle", "sweep", "hover", "scroll", "settle"]),
+  phase: z.enum([
+    "initial",
+    "idle",
+    "sweep",
+    "hover",
+    "scroll",
+    "settle",
+    "consent",
+    "dialog",
+  ]),
   action: z.string(),
   screenshotPath: z.string().optional(),
   note: z.string().optional(),

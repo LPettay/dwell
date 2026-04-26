@@ -43,6 +43,18 @@ export async function dwell(opts: DwellOptions): Promise<SessionManifest> {
     events.push({ t: Math.round(performance.now() - t0), phase, action, ...(note ? { note } : {}) });
   };
 
+  // Auto-dismiss alert / confirm / beforeunload dialogs so they don't hang
+  // the dwelling loop. The text is logged so the impression has context.
+  page.on("dialog", async (dialog) => {
+    const message = dialog.message().slice(0, 200);
+    log("dialog", `dialog:${dialog.type()}`, message || undefined);
+    try {
+      await dialog.dismiss();
+    } catch {
+      // dialog already handled or page closed; ignore
+    }
+  });
+
   const snap = async (phase: InteractionEvent["phase"], action: string, note?: string) => {
     const t = Math.round(performance.now() - t0);
     const filename = `t${String(t).padStart(6, "0")}-${phase}.png`;
@@ -58,9 +70,17 @@ export async function dwell(opts: DwellOptions): Promise<SessionManifest> {
   log("initial", "navigate", opts.url);
   await page.goto(opts.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
 
-  // Phase 1: arrival snapshot (the "first impression" frame)
+  // Pre-phase: best-effort consent-modal dismissal so the arrival frame
+  // captures the actual site, not the cookie banner.
   await page.waitForTimeout(1_500);
-  await snap("initial", "arrival", "after DOMContentLoaded + 1.5s settle");
+  const consent = await tryDismissConsent(page);
+  if (consent.dismissed) {
+    log("consent", "dismissed", consent.via ?? undefined);
+    await page.waitForTimeout(500);
+  }
+
+  // Phase 1: arrival snapshot (the "first impression" frame)
+  await snap("initial", "arrival", consent.dismissed ? "post-consent-dismiss" : "after DOMContentLoaded + 1.5s settle");
 
   // Phase 2: idle observation — let any intro animation play out
   await page.waitForTimeout(3_000);
@@ -149,4 +169,74 @@ async function findRecording(dir: string): Promise<string | null> {
   const entries = await readdir(dir);
   const webm = entries.find((e) => e.endsWith(".webm"));
   return webm ? join(dir, webm) : null;
+}
+
+/**
+ * Best-effort dismissal of cookie / consent modals.
+ *
+ * Two-pass: first scans the DOM for known framework selectors (OneTrust,
+ * iubenda, etc.); failing that, scans for buttons whose text content matches
+ * common consent-affirmative patterns (\`Accept\`, \`Got it\`, \`I agree\`).
+ *
+ * Heuristic by design — silent miss when no candidate is found, no false
+ * positives on sign-up CTAs (we match exact text patterns, not substrings).
+ */
+async function tryDismissConsent(page: Page): Promise<{ dismissed: boolean; via?: string }> {
+  const candidate = await page.evaluate(() => {
+    const knownIds = [
+      "onetrust-accept-btn-handler",
+      "iubenda-cs-accept-btn",
+      "cc-accept",
+      "cookie-accept",
+      "cookie-consent-accept",
+      "cmp-accept-all",
+      "didomi-notice-agree-button",
+    ];
+    for (const id of knownIds) {
+      const byId = document.getElementById(id);
+      if (byId && (byId as HTMLElement).offsetParent !== null) {
+        return { selector: `#${CSS.escape(id)}`, kind: "id" };
+      }
+      const byClass = document.querySelector<HTMLElement>(`.${CSS.escape(id)}`);
+      if (byClass && byClass.offsetParent !== null) {
+        return { selector: `.${CSS.escape(id)}`, kind: "class" };
+      }
+    }
+
+    // Exact text match (case-insensitive) — exact patterns avoid catching
+    // sign-up buttons or other non-consent CTAs.
+    const exactPatterns = [
+      "accept all",
+      "accept all cookies",
+      "accept",
+      "i agree",
+      "got it",
+      "allow all",
+      "allow all cookies",
+      "ok",
+      "agree",
+      "agree and close",
+    ];
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role='button']"));
+    for (const el of candidates) {
+      if (el.offsetParent === null) continue;
+      const text = (el.textContent ?? "").trim().toLowerCase();
+      if (!text) continue;
+      if (exactPatterns.includes(text)) {
+        const tag = `dwell-consent-${Math.random().toString(36).slice(2, 10)}`;
+        el.setAttribute("data-dwell-consent", tag);
+        return { selector: `[data-dwell-consent="${tag}"]`, kind: "text" };
+      }
+    }
+    return null;
+  });
+
+  if (!candidate) return { dismissed: false };
+
+  try {
+    await page.locator(candidate.selector).click({ timeout: 1500 });
+    return { dismissed: true, via: candidate.kind };
+  } catch {
+    return { dismissed: false };
+  }
 }

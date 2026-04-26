@@ -57,6 +57,7 @@ Open the produced markdown at `impressions/<host>-<timestamp>.md`.
 | Flag | Default | What it does |
 |---|---|---|
 | `--duration <seconds>` | `30` | How long to dwell. Choreography phases run inside this budget; remaining time is recorded as additional idle. |
+| `--viewport <preset\|WxH>` | `desktop` (1280×800) | Browser viewport. Presets: `desktop`, `mobile` (390×844), `tablet` (820×1180). Or pass explicit dimensions like `1920x1080`. |
 | `--headless` | off | Debug only. Real impressions require headed Chromium — see [ADR 0004](./docs/decisions/0004-headed-chromium-only.md). |
 
 ---

@@ -133,6 +133,20 @@ It does one thing: produce a textual impression of what a website is like to be 
 
 ---
 
+## Known limitations
+
+Dwell tries to handle these and currently fails on them. They are tracked publicly so users know the edges.
+
+- **Sparse-event aliasing.** Dwell samples ~6–9 keyframes per 25s session. Phenomena visible for less than ~T/N of their period — periodic motion with long periods and short visible windows — may be misread as one-shot events (e.g., an orbiting element described as "fading"). See [ADR 0005](./docs/decisions/0005-sparse-event-aliasing.md) for the diagnosis and the fix sequence; tracked as issues [#3](https://github.com/LPettay/dwell/issues/3)–[#6](https://github.com/LPettay/dwell/issues/6).
+- **Cookie consent modals** block the actual content for the entire dwelling session on EU + many news sites; impression ends up reviewing the modal. Tracked as [#8](https://github.com/LPettay/dwell/issues/8).
+- **Click-to-start affordances** (intro splashes, "Begin experience" gates) are dwelt on at the entry screen rather than the experience itself. Tracked as [#11](https://github.com/LPettay/dwell/issues/11).
+- **Audio is silent.** Recording captures video only. Sites whose character is sound (music visualizers, podcast players, atmospheric audio) are reviewed as visuals only. Tracked as [#12](https://github.com/LPettay/dwell/issues/12).
+- **Mobile-only sites** render their non-primary layout at the fixed 1280×800 viewport. Tracked as [#13](https://github.com/LPettay/dwell/issues/13).
+- **Login walls / paywalls / geo-blocks** — dwell does not authenticate; it produces an impression of the wall, not the product. By design — see [#14](https://github.com/LPettay/dwell/issues/14).
+- **Bot-detection challenges** (Cloudflare, Turnstile, etc.) may serve a challenge page. Dwell does not attempt to evade. By design — see [#15](https://github.com/LPettay/dwell/issues/15).
+
+---
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md). The short version: every directory has an AGENTS.md, every structural choice gets an ADR, `bun run check` is the single hygiene gate, and `main` goes through PRs.

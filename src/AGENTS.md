@@ -8,29 +8,25 @@ The dwell library + CLI. Three stages, in this order: drive → capture → reas
 
 | Path | Purpose |
 |---|---|
+| [`capture/`](./capture/AGENTS.md) | Post-recording helpers (frame extraction, log compaction). ffmpeg / ffprobe wrappers live here. |
 | [`cli/`](./cli/AGENTS.md) | The `dwell` CLI entry point. Argv parsing, orchestration, file output. |
 | [`drive/`](./drive/AGENTS.md) | Playwright session driver — the dwelling choreography. |
 | [`reason/`](./reason/AGENTS.md) | Vision-model boundary — recording artifact → impression. |
 | [`types/`](./types/AGENTS.md) | Zod schemas: `InteractionEvent`, `SessionManifest`, `Impression`. |
-
-### Planned (not yet created)
-
-| Path | Purpose | Pointer |
-|---|---|---|
-| `capture/` | Reserved for video/log post-processing helpers (frame extraction, log compaction) if they ever grow beyond what `drive/` handles inline. | None — landed when needed. |
 
 ---
 
 ## Dependency direction
 
 ```
-cli/  →  drive/, reason/, types/
-drive/ →  types/
-reason/ →  types/
-types/  → (leaf, depends on nothing internal)
+cli/      →  drive/, reason/, types/
+drive/    →  types/
+reason/   →  capture/, types/
+capture/  →  (leaf — node stdlib + ffmpeg subprocess only)
+types/    →  (leaf, depends on nothing internal)
 ```
 
-`cli/` depends on everything below; `types/` depends on nothing. Never invert this. If `drive/` needs something from `reason/`, it's a smell — push the shared piece down into `types/` or extract a new lib.
+`cli/` depends on everything below; `types/` and `capture/` are leaves. Never invert this. If `drive/` needs something from `reason/`, it's a smell — push the shared piece down into `types/` or extract a new lib.
 
 ## What belongs in src/
 

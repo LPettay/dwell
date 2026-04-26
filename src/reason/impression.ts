@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type, type Part } from "@google/genai";
 import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+import { extractFrames, type ExtractedFrame } from "../capture/extract-frames";
 import type { SessionManifest, Impression } from "../types/session";
 
 const SYSTEM_PROMPT = `You are an experiential reviewer of websites.
@@ -29,9 +31,27 @@ export interface BuildImpressionOpts {
   manifest: SessionManifest;
   model?: string;
   apiKey?: string;
+  /**
+   * If true (default), extract additional evenly-spaced frames from the
+   * session webm via ffmpeg in addition to the per-phase screenshots.
+   * Disable for environments without ffmpeg or for debugging.
+   */
+  denseFrames?: boolean;
 }
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
+/** Total frames sent to the model; covers token-cost upper bound. */
+const MAX_FRAMES = 16;
+/** Target spacing for dense frames extracted from the webm. */
+const DENSE_INTERVAL_SECONDS = 1.5;
+
+interface TimedFrame {
+  /** Seconds from session start. */
+  t: number;
+  path: string;
+  /** Short label for the chronological text annotation. */
+  label: string;
+}
 
 export async function buildImpression(opts: BuildImpressionOpts): Promise<Impression> {
   const apiKey = opts.apiKey ?? process.env.GEMINI_API_KEY;
@@ -41,13 +61,23 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
   const model = opts.model ?? process.env.DWELL_MODEL ?? DEFAULT_MODEL;
   const ai = new GoogleGenAI({ apiKey });
 
-  const screenshotEvents = opts.manifest.events.filter((e) => e.screenshotPath);
-  if (screenshotEvents.length === 0) {
-    throw new Error("No screenshots in session — nothing for the model to see.");
+  const phaseFrames: TimedFrame[] = opts.manifest.events
+    .filter((e) => e.screenshotPath)
+    .map((e) => ({
+      t: e.t / 1000,
+      path: e.screenshotPath!,
+      label: `${e.phase} · ${e.action}${e.note ? ` — ${e.note}` : ""}`,
+    }));
+
+  const denseEnabled = opts.denseFrames ?? true;
+  const denseFrames = denseEnabled ? await tryExtractDense(opts.manifest) : [];
+
+  const allFrames = [...phaseFrames, ...denseFrames].sort((a, b) => a.t - b.t);
+  if (allFrames.length === 0) {
+    throw new Error("No frames available — nothing for the model to see.");
   }
 
-  const MAX_FRAMES = 12;
-  const sampled = sampleEvenly(screenshotEvents, MAX_FRAMES);
+  const sampled = sampleEvenly(allFrames, MAX_FRAMES);
 
   const T = opts.manifest.durationMs / 1000;
   const N = sampled.length;
@@ -65,11 +95,11 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
         `The screenshots below are in chronological order. Each is preceded by a timestamp + label.`,
     },
   ];
-  for (const event of sampled) {
+  for (const frame of sampled) {
     parts.push({
-      text: `\n[t=${(event.t / 1000).toFixed(1)}s · ${event.phase} · ${event.action}${event.note ? ` — ${event.note}` : ""}]`,
+      text: `\n[t=${frame.t.toFixed(1)}s · ${frame.label}]`,
     });
-    const bytes = await readFile(event.screenshotPath!);
+    const bytes = await readFile(frame.path);
     parts.push({
       inlineData: { mimeType: "image/png", data: bytes.toString("base64") },
     });
@@ -119,14 +149,60 @@ function sampleEvenly<T>(arr: T[], max: number): T[] {
   return out;
 }
 
-export function renderImpressionMarkdown(impression: Impression, manifest: SessionManifest): string {
+async function tryExtractDense(manifest: SessionManifest): Promise<TimedFrame[]> {
+  if (!manifest.videoPath || manifest.videoPath === "(missing)") return [];
+  const T = manifest.durationMs / 1000;
+  const targetCount = Math.min(MAX_FRAMES, Math.ceil(T / DENSE_INTERVAL_SECONDS));
+  if (targetCount <= 0) return [];
+  const interval = T / targetCount;
+
+  // Frames land in a sibling of recordings/, under the same session root.
+  const sessionRoot = dirname(dirname(manifest.videoPath));
+  const denseDir = join(sessionRoot, "dense-frames");
+
+  let extracted: ExtractedFrame[];
+  try {
+    extracted = await extractFrames(manifest.videoPath, denseDir, {
+      intervalSeconds: interval,
+      maxFrames: targetCount,
+    });
+  } catch (err) {
+    // ffmpeg missing or failed — fall back to phase-aligned only. Surface the
+    // reason so users can fix it if they care, but don't crash the impression.
+    console.warn(`dwell: dense-frame extraction skipped (${err instanceof Error ? err.message : String(err)})`);
+    return [];
+  }
+
+  return extracted.map((f) => ({ t: f.t, path: f.path, label: "dense-sample" }));
+}
+
+export interface RenderImpressionOpts {
+  /** Audit metadata recorded in the markdown frontmatter. */
+  validation?: {
+    triggeredBy: string[];
+    revised: boolean;
+    reason?: string;
+    denseFramesUsed?: number;
+  };
+}
+
+export function renderImpressionMarkdown(
+  impression: Impression,
+  manifest: SessionManifest,
+  opts: RenderImpressionOpts = {},
+): string {
+  const v = opts.validation;
+  const validationFrontmatter = v
+    ? `validation_triggered_by: [${v.triggeredBy.map((s) => JSON.stringify(s)).join(", ")}]
+validation_revised: ${v.revised}${v.reason ? `\nvalidation_reason: ${JSON.stringify(v.reason)}` : ""}${v.denseFramesUsed !== undefined ? `\nvalidation_frames: ${v.denseFramesUsed}` : ""}\n`
+    : "";
   return `---
 url: ${impression.url}
 generated_at: ${impression.generatedAt}
 model: ${impression.model}
 dwell_duration_seconds: ${(manifest.durationMs / 1000).toFixed(1)}
 video: ${manifest.videoPath}
----
+${validationFrontmatter}---
 
 # ${new URL(impression.url).host}
 

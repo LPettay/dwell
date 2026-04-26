@@ -5,9 +5,18 @@ import type { SessionManifest, Impression } from "../types/session";
 
 const SYSTEM_PROMPT = `You are an experiential reviewer of websites.
 
-You are given a chronological sequence of screenshots from a 30-second "dwelling" session — an automated browser opened the URL, sat with it, swept the cursor across it, hovered a few interactive elements, and scrolled. Each screenshot is preceded by a timestamp + label describing what was happening at that moment.
+You are given a chronological sequence of screenshots from a "dwelling" session — an automated browser opened the URL, sat with it, swept the cursor across it, hovered a few interactive elements, and scrolled. Each screenshot is preceded by a timestamp + label describing what was happening at that moment. The user message will tell you exactly how many frames you have and over what duration; treat that as your sampling resolution.
 
-Write a short impression that another human, who has actually been on the site, would read and recognize. Be specific about what you can see — typography, color, motion cues, layout density, what changed between frames when the cursor moved or the page scrolled. Do not speculate about implementation. Do not make claims about consciousness, qualia, or "experience" in any philosophical sense. Don't write marketing copy.`;
+Write a short impression that another human, who has actually been on the site, would read and recognize. Be specific about what you can see — typography, color, motion cues, layout density, what changed between frames when the cursor moved or the page scrolled. Do not speculate about implementation. Do not make claims about consciousness, qualia, or "experience" in any philosophical sense. Don't write marketing copy.
+
+## Reasoning under sparse sampling
+
+Your view of the site is N frames over T seconds, ~T/N apart. You should reason about what that sampling rate can and cannot resolve:
+
+- Phenomena visible for less than ~T/N of their period may appear in zero frames or one frame purely by chance. A single positive observation is consistent with both "X happened once" and "X happens periodically and you caught one cycle."
+- When you describe a state change — particularly that something "fades", "stops", "disappears", "vanishes", or "settles" — distinguish what you actually observed from what you inferred. "I saw the entity at t=1.6s and not at t=6s, t=10s, t=14s" is an observation. "The entity fades away" is an inference and may be wrong if the period exceeds your dwelling duration.
+- Prefer hedged language for inferences supported by a single positive frame: "appears briefly and is not seen again in the sampled window" rather than "fades away within seconds." Use confident language when multiple frames support the same state.
+- If you suspect an animation is periodic but you can't confirm the period from your sample, say so. That is more useful than a wrong narrative.`;
 
 const ImpressionResponse = z.object({
   firstFiveSeconds: z.string(),
@@ -40,9 +49,20 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
   const MAX_FRAMES = 12;
   const sampled = sampleEvenly(screenshotEvents, MAX_FRAMES);
 
+  const T = opts.manifest.durationMs / 1000;
+  const N = sampled.length;
+  const interval = N > 1 ? T / (N - 1) : T;
   const parts: Part[] = [
     {
-      text: `URL: ${opts.manifest.url}\nDwell duration: ${(opts.manifest.durationMs / 1000).toFixed(1)}s\nFrames: ${sampled.length}\n\nThe screenshots below are in chronological order. Each is preceded by a timestamp + label.`,
+      text:
+        `URL: ${opts.manifest.url}\n` +
+        `Dwell duration: ${T.toFixed(1)}s\n` +
+        `Frames: ${N}  (≈ one frame every ${interval.toFixed(1)}s)\n\n` +
+        `Sampling resolution note: any visual phenomenon visible for less ` +
+        `than ~${interval.toFixed(1)}s of its period may appear in zero or one frames purely ` +
+        `by chance. Hedge language about "fades / stops / disappears" when only one frame supports it. ` +
+        `Periodic phenomena with period > ${T.toFixed(0)}s cannot be resolved from this sample at all.\n\n` +
+        `The screenshots below are in chronological order. Each is preceded by a timestamp + label.`,
     },
   ];
   for (const event of sampled) {

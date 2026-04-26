@@ -4,12 +4,16 @@
 # Bypass with --no-verify only in emergencies. Document why in your commit
 # message if you do.
 
+# Lefthook spawns subprocesses that don't inherit the user's interactive shell
+# rc files, so PATH may not include ~/.bun/bin (bun's default install location
+# on Linux + macOS). Prepend it explicitly so `bun` resolves regardless of how
+# the parent process was launched.
 pre-commit:
   parallel: true
   commands:
     repo-checks:
-      run: bun run check
+      run: PATH="$HOME/.bun/bin:$PATH" bun run check
       stage_fixed: false
     typecheck:
       glob: "**/*.ts"
-      run: bun run typecheck
+      run: PATH="$HOME/.bun/bin:$PATH" bun run typecheck

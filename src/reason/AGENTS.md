@@ -39,3 +39,6 @@ See [ADR 0002](../../docs/decisions/0002-gemini-for-vision.md). Short version: G
 
 ---
 
+---
+
+<!-- last-reviewed: e2872b9 -->

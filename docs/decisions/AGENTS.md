@@ -38,3 +38,6 @@ Copy `0000-template.md`. Sections: Status / Context / Decision / Consequences / 
 
 ---
 
+---
+
+<!-- last-reviewed: e2872b9 -->

@@ -127,7 +127,7 @@ When you add a file, add an entry. When you create a file from "Planned", move i
 Every `AGENTS.md` carries a footer:
 
 ```markdown
-<!-- last-reviewed: 0d84014 -->
+<!-- last-reviewed: e2872b9 -->
 ```
 
 When more than 5 non-AGENTS files in its directory change after that SHA, the doc is stale. `bun run check` fails until you:

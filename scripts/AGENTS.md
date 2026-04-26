@@ -38,3 +38,6 @@ Repo-hygiene tooling. The single command `bun run check` reports every violation
 
 ---
 
+---
+
+<!-- last-reviewed: e2872b9 -->

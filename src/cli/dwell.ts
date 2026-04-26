@@ -19,7 +19,25 @@ function parseArgs(argv: string[]): { url: string; durationMs?: number; headed: 
     console.error("usage: dwell <url> [--duration <seconds>] [--headless]");
     process.exit(2);
   }
+  url = normalizeUrl(url);
   return { url, ...(durationMs !== undefined ? { durationMs } : {}), headed };
+}
+
+/**
+ * Accept bare hostnames (`example.com`) and add `https://` when no scheme is
+ * present. Anything with an existing scheme passes through. Genuinely
+ * malformed input exits with a useful argparse-style error rather than a
+ * downstream stack trace.
+ */
+export function normalizeUrl(input: string): string {
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
+  try {
+    new URL(candidate);
+    return candidate;
+  } catch {
+    console.error(`error: '${input}' is not a valid URL`);
+    process.exit(2);
+  }
 }
 
 function slugHost(url: string): string {
@@ -61,7 +79,10 @@ async function main() {
   console.log(`\n  ${impression.oneSentenceVerdict}\n`);
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.stack ?? err.message : err);
-  process.exit(1);
-});
+// Only run when invoked as the entry point (not when imported, e.g. by tests).
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.stack ?? err.message : err);
+    process.exit(1);
+  });
+}

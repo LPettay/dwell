@@ -1,6 +1,6 @@
 # AGENTS.md — src/reason/
 
-The vision-model boundary. Reads a `SessionManifest` + screenshots, produces an `Impression`. This is the only file in the project that talks to an LLM.
+The vision-model boundary. Reads a `SessionManifest` + screenshots, produces an `Impression`. This is the only directory in the project that talks to an LLM.
 
 ## Index
 
@@ -8,22 +8,23 @@ The vision-model boundary. Reads a `SessionManifest` + screenshots, produces an 
 
 | File | Purpose |
 |---|---|
-| `impression.ts` | `buildImpression(opts)` calls Gemini with chronological multi-image content + structured output. `renderImpressionMarkdown(impression, manifest)` formats the result for disk. |
+| `impression.ts` | `buildImpression(opts)` — Gemini multi-image call with chronological content + structured output. Combines per-phase screenshots with dense frames extracted from the webm via `../capture/`. `renderImpressionMarkdown(...)` formats the result for disk. |
+| `validate.ts` | `validateImpression(opts)` — second pass that runs only when the impression contains stop-words (`fades`, `disappears`, `vanishes`, `stops`, `settles`, etc.). Re-samples a denser frame set via `../capture/` and asks the model to confirm or revise. See ADR 0005. |
 
 ---
 
 ## What belongs here
 
-- The system prompt for the impression task.
-- The model client (Google `@google/genai`) and the structured-output schema.
-- Frame sampling logic (we cap to 12 evenly-spaced frames to keep token cost predictable).
+- System prompts for any model task in this codebase.
+- The model client (Google `@google/genai`) and structured-output schemas.
+- Frame sampling / model-budget logic (capped at MAX_FRAMES per call to keep token cost predictable).
 - Markdown rendering of the final impression.
 
 ## What does not belong here
 
 - Driving the browser (that's `../drive/`).
 - Arg parsing (that's `../cli/`).
-- Any prompt or model call other than the impression — if a second LLM-using flow emerges, give it its own file (`impression.ts`, `summary.ts`, etc.).
+- Frame-extraction primitives — those live in `../capture/`. This module orchestrates extraction; it doesn't shell out to ffmpeg directly.
 
 ## Conventions
 

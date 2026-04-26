@@ -39,11 +39,12 @@ Details a single-screenshot pipeline cannot see.
 
 ## Quick start
 
-> Requires [Bun](https://bun.sh) ≥ 1.1, a Google AI Studio key, and a display server (WSLg works on WSL2; native X/Wayland everywhere else).
+> Requires [Bun](https://bun.sh) ≥ 1.1, a Google AI Studio key, `ffmpeg` on PATH (for dense-frame extraction), and a display server (WSLg works on WSL2; native X/Wayland everywhere else).
 
 ```bash
 bun install
 bun playwright install chromium    # if not already cached
+ffmpeg -version                     # must be on PATH; install via your package manager if missing
 echo "GEMINI_API_KEY=..." > .env
 
 bun run dwell https://fireside.technology/

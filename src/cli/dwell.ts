@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { dwell } from "../drive/dwell-session";
 import { buildImpression, renderImpressionMarkdown } from "../reason/impression";
+import { validateImpression } from "../reason/validate";
 
 function parseArgs(argv: string[]): { url: string; durationMs?: number; headed: boolean } {
   const args = argv.slice(2);
@@ -69,12 +70,43 @@ async function main() {
   console.log(`  video:       ${manifest.videoPath}`);
 
   console.log(`▶ asking the model to write an impression…`);
-  const impression = await buildImpression({ manifest });
+  const initial = await buildImpression({ manifest });
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  const model = process.env.DWELL_MODEL ?? "gemini-2.5-pro";
+  let validation: Awaited<ReturnType<typeof validateImpression>> | undefined;
+  if (apiKey) {
+    const result = await validateImpression({ impression: initial, manifest, apiKey, model });
+    if (result.triggeredBy.length > 0) {
+      if (result.revised) {
+        console.log(`⚠ validation pass revised the impression (triggered by: ${result.triggeredBy.join(", ")})`);
+        if (result.revisionReason) console.log(`  reason: ${result.revisionReason}`);
+      } else {
+        console.log(`✓ validation pass confirmed (triggered by: ${result.triggeredBy.join(", ")})`);
+      }
+      validation = result;
+    }
+  }
+  const impression = validation?.impression ?? initial;
 
   const impressionsDir = join(process.cwd(), "impressions");
   await mkdir(impressionsDir, { recursive: true });
   const outPath = join(impressionsDir, `${host}-${stamp}.md`);
-  await writeFile(outPath, renderImpressionMarkdown(impression, manifest));
+  await writeFile(
+    outPath,
+    renderImpressionMarkdown(impression, manifest, {
+      ...(validation
+        ? {
+            validation: {
+              triggeredBy: validation.triggeredBy,
+              revised: validation.revised,
+              ...(validation.revisionReason !== undefined ? { reason: validation.revisionReason } : {}),
+              ...(validation.denseFramesUsed !== undefined ? { denseFramesUsed: validation.denseFramesUsed } : {}),
+            },
+          }
+        : {}),
+    }),
+  );
   console.log(`✓ impression written: ${outPath}`);
   console.log(`\n  ${impression.oneSentenceVerdict}\n`);
 }

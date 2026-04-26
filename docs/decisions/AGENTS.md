@@ -13,6 +13,7 @@ Architecture Decision Records. One short markdown per structural choice. Numbere
 | `0002-gemini-for-vision.md` | Why Gemini over Anthropic for the reasoning step. |
 | `0003-record-then-reason.md` | Recording-then-reasoning is the architectural wedge. |
 | `0004-headed-chromium-only.md` | Headless browsing defeats the point of a dwelling tool. |
+| `0005-sparse-event-aliasing.md` | Owning the periodic-phenomena failure mode publicly in v0.1. |
 
 ---
 

@@ -137,15 +137,25 @@ It does one thing: produce a textual impression of what a website is like to be 
 
 ## Known limitations
 
-Dwell tries to handle these and currently fails on them. They are tracked publicly so users know the edges.
+Dwell's edges, tracked publicly so users know what to expect.
 
-- **Sparse-event aliasing.** Dwell samples ~6–9 keyframes per 25s session. Phenomena visible for less than ~T/N of their period — periodic motion with long periods and short visible windows — may be misread as one-shot events (e.g., an orbiting element described as "fading"). See [ADR 0005](./docs/decisions/0005-sparse-event-aliasing.md) for the diagnosis and the fix sequence; tracked as issues [#3](https://github.com/LPettay/dwell/issues/3)–[#6](https://github.com/LPettay/dwell/issues/6).
-- **Cookie consent modals** block the actual content for the entire dwelling session on EU + many news sites; impression ends up reviewing the modal. Tracked as [#8](https://github.com/LPettay/dwell/issues/8).
-- **Click-to-start affordances** (intro splashes, "Begin experience" gates) are dwelt on at the entry screen rather than the experience itself. Tracked as [#11](https://github.com/LPettay/dwell/issues/11).
-- **Audio is silent.** Recording captures video only. Sites whose character is sound (music visualizers, podcast players, atmospheric audio) are reviewed as visuals only. Tracked as [#12](https://github.com/LPettay/dwell/issues/12).
-- **Mobile-only sites** render their non-primary layout at the fixed 1280×800 viewport. Tracked as [#13](https://github.com/LPettay/dwell/issues/13).
-- **Login walls / paywalls / geo-blocks** — dwell does not authenticate; it produces an impression of the wall, not the product. By design — see [#14](https://github.com/LPettay/dwell/issues/14).
-- **Bot-detection challenges** (Cloudflare, Turnstile, etc.) may serve a challenge page. Dwell does not attempt to evade. By design — see [#15](https://github.com/LPettay/dwell/issues/15).
+### Best-effort (handled, but not bulletproof)
+
+- **Sparse-event aliasing.** Periodic phenomena with long periods + short visible windows could be misread as one-shot events (e.g., an orbiting element described as "fading"). The current pipeline mitigates this with denser frame sampling from the recording webm and a validation pass that re-checks impressions containing words like *fades / disappears / settles*. See [ADR 0005](./docs/decisions/0005-sparse-event-aliasing.md). Full video-tier reasoning ([#6](https://github.com/LPettay/dwell/issues/6)) is the gold-standard remaining fix.
+- **Cookie consent modals.** Auto-dismissed via a DOM-scan heuristic that handles common frameworks (OneTrust, iubenda, didomi, etc.) and exact-match button text. Sites with custom or unusual consent UI may still slip through.
+- **Mobile-only sites.** Use `--viewport mobile` (or `tablet`, or explicit `WxH`) to render at a non-desktop viewport.
+
+### Open gaps (still fail)
+
+- **Click-to-start affordances** — intro splashes, "Begin experience" gates. Dwell hovers but never clicks an entry button. Tracked as [#11](https://github.com/LPettay/dwell/issues/11).
+- **Audio is silent.** Recording captures video only. Sites whose character is sound — music visualizers, podcast players, atmospheric audio — are reviewed as visuals only. Tracked as [#12](https://github.com/LPettay/dwell/issues/12).
+
+### Out of scope (by design)
+
+These aren't gaps; they're deliberate boundaries.
+
+- **Login walls / paywalls / geo-blocks.** Dwell does not authenticate. It will produce an impression of the wall, not the product. Auth flow is task-completion territory — for that, use [browser-use](https://github.com/browser-use/browser-use) or write a Playwright wrapper that handles your auth, then point it at dwell's reasoning layer. See [#14](https://github.com/LPettay/dwell/issues/14).
+- **Bot-detection evasion.** Sites protected by Cloudflare Turnstile, PerimeterX, DataDome, or hCaptcha may serve a challenge page; dwell records the challenge and describes it. Evasion would push dwell from *honest observation* into automation arms-race territory. For users who need this, [playwright-stealth](https://github.com/AtuboDad/playwright_stealth) or [undetected-playwright](https://github.com/QIN2DIM/undetected-playwright) are the right tools to compose with dwell, not to fold into it. See [#15](https://github.com/LPettay/dwell/issues/15).
 
 ---
 

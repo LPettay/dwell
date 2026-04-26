@@ -75,14 +75,16 @@ Everything else is P2 or lower.
 
 Out of scope:
 
-- Task completion (filling forms, logging in, purchasing — use [browser-use](https://github.com/browser-use/browser-use) or Playwright directly)
-- Structured data scraping
-- Multi-page crawling beyond what dwelling on a single URL implies
-- Running headless as the default (defeats the point — see [ADR 0004](./docs/decisions/0004-headed-chromium-only.md))
-- Replacing test runners or accessibility tooling
-- A web UI / dashboard for impressions
-- A SaaS hosted version
-- Any claim about machine consciousness, qualia, or sentience in user-facing copy or docs
+- **Task completion** (filling forms, logging in, purchasing) — use [browser-use](https://github.com/browser-use/browser-use) or Playwright directly.
+- **Authentication of any kind** — dwell does not log in, does not collect or store credentials, does not implement OAuth flows, does not solve CAPTCHAs. A user with their own pre-authenticated browser context is welcome to compose with dwell, but acquiring auth state is *their* problem, not dwell's.
+- **Bot-detection evasion** — no fingerprint rotation, no `playwright-stealth` integration, no residential proxies, no CAPTCHA solvers. Compose with upstream evasion tooling if needed; do not fold it in. The project's positioning is *honest observation*, not *covert observation*.
+- **Structured data scraping** — use a scraper.
+- **Multi-page crawling** beyond what dwelling on a single URL implies.
+- **Running headless as the default** (defeats the point — see [ADR 0004](./docs/decisions/0004-headed-chromium-only.md)).
+- **Replacing test runners or accessibility tooling.**
+- **A web UI / dashboard for impressions.**
+- **A SaaS hosted version.**
+- **Any claim about machine consciousness, qualia, or sentience** in user-facing copy or docs.
 
 If a contributor (human or AI) proposes one of these, redirect to [`docs/decisions/`](./docs/decisions/) — it needs an ADR before any code lands.
 

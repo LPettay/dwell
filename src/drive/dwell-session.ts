@@ -8,9 +8,13 @@ export interface DwellOptions {
   outDir: string;
   durationMs?: number;
   headed?: boolean;
+  viewport?: { width: number; height: number };
 }
 
 const DEFAULT_DURATION_MS = 30_000;
+const DEFAULT_VIEWPORT = { width: 1280, height: 800 };
+/** Cap on scroll-to-grow iterations during the scroll phase (lazy-load support). */
+const MAX_SCROLL_ITERATIONS = 5;
 
 /**
  * The dwelling strategy: open a real browser, sit with the page, and probe it
@@ -26,10 +30,11 @@ export async function dwell(opts: DwellOptions): Promise<SessionManifest> {
   await mkdir(screenshotsDir, { recursive: true });
 
   const headed = opts.headed ?? true;
+  const viewport = opts.viewport ?? DEFAULT_VIEWPORT;
   const browser: Browser = await chromium.launch({ headless: !headed });
   const context: BrowserContext = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    recordVideo: { dir: recordingsDir, size: { width: 1280, height: 800 } },
+    viewport,
+    recordVideo: { dir: recordingsDir, size: viewport },
     deviceScaleFactor: 1,
   });
 
@@ -121,21 +126,34 @@ export async function dwell(opts: DwellOptions): Promise<SessionManifest> {
     log("hover", "affordance-probe-failed");
   }
 
-  // Phase 5: scroll the page if it's tall enough to scroll
-  const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-  const viewportHeight = 800;
-  if (scrollHeight > viewportHeight + 100) {
-    await page.mouse.wheel(0, scrollHeight / 2);
+  // Phase 5: scroll the page if it's tall enough to scroll. Loops the
+  // scroll-to-bottom until either the document stops growing or the
+  // iteration cap is hit — this surfaces lazy-loaded content that's only
+  // mounted when scrolled into view.
+  const initialScrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  if (initialScrollHeight > viewport.height + 100) {
+    await page.mouse.wheel(0, initialScrollHeight / 2);
     await page.waitForTimeout(800);
-    await snap("scroll", "halfway-down", `scrollHeight=${scrollHeight}`);
-    await page.mouse.wheel(0, scrollHeight);
-    await page.waitForTimeout(800);
-    await snap("scroll", "near-bottom");
-    await page.mouse.wheel(0, -scrollHeight * 2);
+    await snap("scroll", "halfway-down", `scrollHeight=${initialScrollHeight}`);
+
+    let lastHeight = initialScrollHeight;
+    let iteration = 0;
+    while (iteration < MAX_SCROLL_ITERATIONS) {
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" as ScrollBehavior }));
+      await page.waitForTimeout(900);
+      const newHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      if (newHeight <= lastHeight + 50) break;
+      iteration += 1;
+      await snap("scroll", "lazy-grow", `iter=${iteration} height=${newHeight}`);
+      lastHeight = newHeight;
+    }
+    await snap("scroll", "near-bottom", `final-scrollHeight=${lastHeight}${iteration > 0 ? ` (${iteration} lazy-grow iters)` : ""}`);
+
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }));
     await page.waitForTimeout(800);
     await snap("scroll", "back-to-top");
   } else {
-    log("scroll", "page-not-scrollable", `scrollHeight=${scrollHeight}`);
+    log("scroll", "page-not-scrollable", `scrollHeight=${initialScrollHeight}`);
   }
 
   // Phase 6: settle — one last frame after everything else

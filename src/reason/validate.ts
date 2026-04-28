@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { extractFrames } from "../capture/extract-frames";
 import type { SessionManifest, Impression } from "../types/session";
+import { withTimeout, modelTimeoutMs } from "./impression";
 
 /**
  * Words/phrases that imply a permanent state change. When any of these appear
@@ -115,7 +116,8 @@ export async function validateImpression(opts: ValidateImpressionOpts): Promise<
     });
   }
 
-  const response = await ai.models.generateContent({
+  const response = await withTimeout(
+    ai.models.generateContent({
     model: opts.model,
     contents: [{ role: "user", parts }],
     config: {
@@ -139,7 +141,10 @@ export async function validateImpression(opts: ValidateImpressionOpts): Promise<
         propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict", "revisionReason"],
       },
     },
-  });
+  }),
+    modelTimeoutMs(),
+    "validation pass",
+  );
 
   const text = response.text;
   if (!text) {

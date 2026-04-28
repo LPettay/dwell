@@ -44,6 +44,36 @@ const DEFAULT_MODEL = "gemini-2.5-pro";
 const MAX_FRAMES = 16;
 /** Target spacing for dense frames extracted from the webm. */
 const DENSE_INTERVAL_SECONDS = 1.5;
+/** Default ceiling on a single model call. Override with DWELL_MODEL_TIMEOUT_MS. */
+const DEFAULT_MODEL_TIMEOUT_MS = 120_000;
+
+/**
+ * Bound a promise by a timeout. Surfaces a clear error on stall instead of
+ * letting the process hang indefinitely. The underlying request may continue
+ * running in the background until the process exits — acceptable for a CLI.
+ */
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${(timeoutMs / 1000).toFixed(0)}s — set DWELL_MODEL_TIMEOUT_MS=<ms> to override`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Read the configured per-call model timeout; sane fallback if env is malformed. */
+export function modelTimeoutMs(): number {
+  const raw = process.env.DWELL_MODEL_TIMEOUT_MS;
+  if (!raw) return DEFAULT_MODEL_TIMEOUT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_MODEL_TIMEOUT_MS;
+}
 
 interface TimedFrame {
   /** Seconds from session start. */
@@ -105,7 +135,8 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
     });
   }
 
-  const response = await ai.models.generateContent({
+  const response = await withTimeout(
+    ai.models.generateContent({
     model,
     contents: [{ role: "user", parts }],
     config: {
@@ -123,7 +154,10 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
         propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict"],
       },
     },
-  });
+  }),
+    modelTimeoutMs(),
+    "impression generation",
+  );
 
   const text = response.text;
   if (!text) throw new Error("Model returned no text.");

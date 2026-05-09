@@ -16,6 +16,7 @@ Each subdirectory has its own `AGENTS.md` with scope-specific guidance — read 
 ├── scripts/AGENTS.md               Repo-hygiene scripts (check, stamp)
 │   └── lib/AGENTS.md               Check helper modules (config, walk, git, types, individual checks)
 └── src/AGENTS.md                   Library + CLI source root
+    ├── capture/AGENTS.md           Post-recording helpers (frame extraction, log compaction); ffmpeg wrappers
     ├── cli/AGENTS.md               `dwell` CLI entry point
     ├── drive/AGENTS.md             Playwright session driver — the dwelling choreography
     ├── reason/AGENTS.md            Vision-model boundary: artifact → impression

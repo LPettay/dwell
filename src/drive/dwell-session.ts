@@ -192,9 +192,16 @@ async function findRecording(dir: string): Promise<string | null> {
 /**
  * Best-effort dismissal of cookie / consent modals.
  *
- * Two-pass: first scans the DOM for known framework selectors (OneTrust,
- * iubenda, etc.); failing that, scans for buttons whose text content matches
- * common consent-affirmative patterns (\`Accept\`, \`Got it\`, \`I agree\`).
+ * Three-pass:
+ *   1. Known framework selectors (OneTrust, iubenda, etc.).
+ *   2. Buttons whose text matches affirmative-consent patterns (\`Accept\`,
+ *      \`Got it\`, \`I agree\`).
+ *   3. Generic info-banner dismissal — close-affordance text (\`Close\`,
+ *      \`Dismiss\`, \`No thanks\`, \`×\`) plus \`aria-label\` fallback for
+ *      icon-only X buttons. Pass 3 is geometry-guarded: it only clicks when
+ *      the candidate sits inside a fixed/sticky container that either covers
+ *      a sizeable chunk of the viewport or hugs an edge — banners do, but
+ *      tooltips, dropdowns, and inline notification badges don't.
  *
  * Heuristic by design — silent miss when no candidate is found, no false
  * positives on sign-up CTAs (we match exact text patterns, not substrings).
@@ -246,6 +253,83 @@ async function tryDismissConsent(page: Page): Promise<{ dismissed: boolean; via?
         return { selector: `[data-dwell-consent="${tag}"]`, kind: "text" };
       }
     }
+
+    // Pass 3 — info-banner dismissal affordances.
+    //
+    // Affirmative passes get first refusal so a real "Accept" wins over a
+    // nearby "X". "got it" deliberately stays in Pass 2 (affirmative) — it's
+    // closer to consent than dismissal and we don't want it duplicated.
+    const dismissPatterns = [
+      "close",
+      "dismiss",
+      "no thanks",
+      "maybe later",
+      "skip",
+      "x",
+      "×", // multiplication-sign close glyph
+    ];
+
+    // Geometry guard: a banner-like overlay either covers >20% of the
+    // viewport OR is anchored full-width / full-height to an edge. Tooltips,
+    // dropdowns, cart popovers, and inline notification badges fail both.
+    const looksLikeBanner = (el: HTMLElement): boolean => {
+      let node: HTMLElement | null = el;
+      while (node && node !== document.body) {
+        const style = getComputedStyle(node);
+        if (style.position === "fixed" || style.position === "sticky") {
+          const rect = node.getBoundingClientRect();
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          if (vw === 0 || vh === 0) return false;
+          const areaRatio = (rect.width * rect.height) / (vw * vh);
+          if (areaRatio > 0.2) return true;
+          // Edge anchoring: full-width band on top/bottom or full-height
+          // strip on left/right. Tolerate a few pixels of inset.
+          const fullWidth = rect.width >= vw * 0.95;
+          const fullHeight = rect.height >= vh * 0.95;
+          const hugsTop = rect.top <= 4;
+          const hugsBottom = rect.bottom >= vh - 4;
+          const hugsLeft = rect.left <= 4;
+          const hugsRight = rect.right >= vw - 4;
+          if (fullWidth && (hugsTop || hugsBottom)) return true;
+          if (fullHeight && (hugsLeft || hugsRight)) return true;
+          // A fixed/sticky ancestor that's neither big nor edge-hugging
+          // (e.g. a tooltip, popover) — bail out so we don't keep walking
+          // up into an unrelated outer fixed shell.
+          return false;
+        }
+        node = node.parentElement;
+      }
+      return false;
+    };
+
+    const tagAndReturn = (el: HTMLElement, kind: string) => {
+      const tag = `dwell-consent-${Math.random().toString(36).slice(2, 10)}`;
+      el.setAttribute("data-dwell-consent", tag);
+      return { selector: `[data-dwell-consent="${tag}"]`, kind };
+    };
+
+    // 3a: visible-text dismissal candidates.
+    for (const el of candidates) {
+      if (el.offsetParent === null) continue;
+      const text = (el.textContent ?? "").trim().toLowerCase();
+      if (!text) continue;
+      if (!dismissPatterns.includes(text)) continue;
+      if (!looksLikeBanner(el)) continue;
+      return tagAndReturn(el, "text-dismiss");
+    }
+
+    // 3b: aria-label fallback for icon-only X buttons.
+    const ariaCandidates = Array.from(document.querySelectorAll<HTMLElement>("button[aria-label], [role='button'][aria-label], a[aria-label]"));
+    for (const el of ariaCandidates) {
+      if (el.offsetParent === null) continue;
+      const label = (el.getAttribute("aria-label") ?? "").trim().toLowerCase();
+      if (!label) continue;
+      if (!dismissPatterns.includes(label)) continue;
+      if (!looksLikeBanner(el)) continue;
+      return tagAndReturn(el, "aria-dismiss");
+    }
+
     return null;
   });
 

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { extractFrames } from "../capture/extract-frames";
 import type { SessionManifest, Impression } from "../types/session";
-import { withTimeout, modelTimeoutMs } from "./impression";
+import { runWithTimeout, modelTimeoutMs } from "./impression";
 
 /**
  * Words/phrases that imply a permanent state change. When any of these appear
@@ -35,6 +35,12 @@ export interface ValidateImpressionOpts {
   manifest: SessionManifest;
   apiKey: string;
   model: string;
+  /**
+   * Optional cumulative budget shared with the impression call. Aborting it
+   * cancels the in-flight model request and rejects the call. Independent
+   * from the per-stage timeout (`DWELL_MODEL_TIMEOUT_MS`).
+   */
+  signal?: AbortSignal;
 }
 
 export interface ValidationResult {
@@ -116,34 +122,37 @@ export async function validateImpression(opts: ValidateImpressionOpts): Promise<
     });
   }
 
-  const response = await withTimeout(
-    ai.models.generateContent({
-    model: opts.model,
-    contents: [{ role: "user", parts }],
-    config: {
-      systemInstruction:
-        `You are auditing an earlier impression of a website against a denser frame sample. ` +
-        `Your job is to surface periodic structure that the earlier sample missed and to correct ` +
-        `confidently-permanent claims that the denser sample shows are actually periodic. ` +
-        `Don't change content that is still supported. Don't speculate beyond the new frames. ` +
-        `Output the same Impression schema fields plus a one-line revisionReason.`,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          firstFiveSeconds: { type: Type.STRING },
-          afterExploration: { type: Type.STRING },
-          settling: { type: Type.STRING },
-          oneSentenceVerdict: { type: Type.STRING },
-          revisionReason: { type: Type.STRING },
+  const response = await runWithTimeout(
+    (abortSignal) =>
+      ai.models.generateContent({
+        model: opts.model,
+        contents: [{ role: "user", parts }],
+        config: {
+          abortSignal,
+          systemInstruction:
+            `You are auditing an earlier impression of a website against a denser frame sample. ` +
+            `Your job is to surface periodic structure that the earlier sample missed and to correct ` +
+            `confidently-permanent claims that the denser sample shows are actually periodic. ` +
+            `Don't change content that is still supported. Don't speculate beyond the new frames. ` +
+            `Output the same Impression schema fields plus a one-line revisionReason.`,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              firstFiveSeconds: { type: Type.STRING },
+              afterExploration: { type: Type.STRING },
+              settling: { type: Type.STRING },
+              oneSentenceVerdict: { type: Type.STRING },
+              revisionReason: { type: Type.STRING },
+            },
+            required: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict", "revisionReason"],
+            propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict", "revisionReason"],
+          },
         },
-        required: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict", "revisionReason"],
-        propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict", "revisionReason"],
-      },
-    },
-  }),
+      }),
     modelTimeoutMs(),
     "validation pass",
+    opts.signal,
   );
 
   const text = response.text;

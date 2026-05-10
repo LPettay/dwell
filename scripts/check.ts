@@ -14,6 +14,7 @@
  */
 
 import { resolve } from "node:path";
+import { config } from "./lib/config.ts";
 import { checkPresence } from "./lib/check-presence.ts";
 import { checkForbidden } from "./lib/check-forbidden.ts";
 import { checkFreshness } from "./lib/check-freshness.ts";
@@ -52,9 +53,9 @@ function main(): void {
   const repoRoot = resolve(import.meta.dir, "..");
 
   const results: CheckResult[] = [];
-  if (only.includes("presence")) results.push(checkPresence(repoRoot));
-  if (only.includes("forbidden")) results.push(checkForbidden(repoRoot));
-  if (only.includes("freshness")) results.push(checkFreshness(repoRoot, { verbose }));
+  if (only.includes("presence")) results.push(checkPresence(repoRoot, config));
+  if (only.includes("forbidden")) results.push(checkForbidden(repoRoot, config));
+  if (only.includes("freshness")) results.push(checkFreshness(repoRoot, config, { verbose }));
 
   printReport(results);
 

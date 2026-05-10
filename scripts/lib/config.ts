@@ -1,7 +1,17 @@
 /**
- * Enforcement configuration. Tweak with care — these values shape the
- * friction surface of the project.
+ * Per-repo seam for the AGENTS.md crawl infrastructure.
+ *
+ * The other files in `scripts/lib/` (walk, git, types, check-*) are symlinks
+ * back to the FleetManager template at
+ * `~/FleetManager/templates/agents-crawl/lib/`. DO NOT edit those — edit this
+ * file. The lib files take this config as a parameter; `scripts/check.ts` and
+ * `scripts/stamp.ts` thread it through each call.
+ *
+ * `satisfies CrawlConfig` ensures any drift from the template's contract
+ * fails typecheck immediately.
  */
+
+import type { CrawlConfig } from "./types.ts";
 
 export const config = {
   /** Directories that must contain an AGENTS.md if they contain other files. */
@@ -47,7 +57,7 @@ export const config = {
   /** Footer marker used by stamp.ts. */
   stampPrefix: "<!-- last-reviewed:",
   stampSuffix: "-->",
-} as const;
+} as const satisfies CrawlConfig;
 
 export function formatStamp(sha: string): string {
   return `${config.stampPrefix} ${sha} ${config.stampSuffix}`;

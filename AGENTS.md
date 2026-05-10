@@ -80,7 +80,7 @@ Out of scope:
 - **Authentication of any kind** — dwell does not log in, does not collect or store credentials, does not implement OAuth flows, does not solve CAPTCHAs. A user with their own pre-authenticated browser context is welcome to compose with dwell, but acquiring auth state is *their* problem, not dwell's.
 - **Bot-detection evasion** — no fingerprint rotation, no `playwright-stealth` integration, no residential proxies, no CAPTCHA solvers. Compose with upstream evasion tooling if needed; do not fold it in. The project's positioning is *honest observation*, not *covert observation*.
 - **Structured data scraping** — use a scraper.
-- **Multi-page crawling** beyond what dwelling on a single URL implies.
+- **Multi-page crawling** beyond what dwelling on a single declared experience unit implies. The default experience unit is one URL; a driver may declare a wider unit (e.g. one YouTube channel) only via an accepted ADR. See [ADR 0006](./docs/decisions/0006-experience-unit-multi-url.md).
 - **Running headless as the default** (defeats the point — see [ADR 0004](./docs/decisions/0004-headed-chromium-only.md)).
 - **Replacing test runners or accessibility tooling.**
 - **A web UI / dashboard for impressions.**

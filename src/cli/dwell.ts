@@ -2,7 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { dwell } from "../drive/dwell-session";
-import { buildImpression, renderImpressionMarkdown } from "../reason/impression";
+import { buildImpression, modelTimeoutMs, renderImpressionMarkdown } from "../reason/impression";
 import { validateImpression } from "../reason/validate";
 
 interface ParsedArgs {
@@ -105,13 +105,19 @@ async function main() {
   console.log(`  video:       ${manifest.videoPath}`);
 
   console.log(`▶ asking the model to write an impression…`);
-  const initial = await buildImpression({ manifest });
+  // Cumulative backstop across the impression + validation calls. Per-stage
+  // ceilings (DWELL_MODEL_TIMEOUT_MS) still apply inside each call; this
+  // signal guarantees the whole reasoning flow can't outrun 2x the per-stage
+  // budget even if both stages stall right at their individual limits.
+  const totalBudgetMs = modelTimeoutMs() * 2;
+  const totalBudget = AbortSignal.timeout(totalBudgetMs);
+  const initial = await buildImpression({ manifest, signal: totalBudget });
 
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.DWELL_MODEL ?? "gemini-2.5-pro";
   let validation: Awaited<ReturnType<typeof validateImpression>> | undefined;
   if (apiKey) {
-    const result = await validateImpression({ impression: initial, manifest, apiKey, model });
+    const result = await validateImpression({ impression: initial, manifest, apiKey, model, signal: totalBudget });
     if (result.triggeredBy.length > 0) {
       if (result.revised) {
         console.log(`⚠ validation pass revised the impression (triggered by: ${result.triggeredBy.join(", ")})`);

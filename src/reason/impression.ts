@@ -37,6 +37,13 @@ export interface BuildImpressionOpts {
    * Disable for environments without ffmpeg or for debugging.
    */
   denseFrames?: boolean;
+  /**
+   * Optional cumulative budget shared with downstream calls (e.g. the
+   * validation pass). When this signal aborts, the in-flight model request is
+   * cancelled and the call rejects. Independent from the per-stage timeout
+   * (`DWELL_MODEL_TIMEOUT_MS`) — whichever fires first wins.
+   */
+  signal?: AbortSignal;
 }
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
@@ -48,22 +55,59 @@ const DENSE_INTERVAL_SECONDS = 1.5;
 const DEFAULT_MODEL_TIMEOUT_MS = 120_000;
 
 /**
- * Bound a promise by a timeout. Surfaces a clear error on stall instead of
- * letting the process hang indefinitely. The underlying request may continue
- * running in the background until the process exits — acceptable for a CLI.
+ * Run a model call under both a per-stage timeout and an optional outer
+ * AbortSignal (the caller's cumulative budget). Whichever fires first aborts
+ * the in-flight HTTP request — the @google/genai SDK honors `abortSignal`
+ * client-side, so this actually cancels the fetch instead of leaving it
+ * orphaned in the background like a `Promise.race` against a `setTimeout`.
+ *
+ * The factory is invoked synchronously with the signal so the caller can
+ * thread it into `ai.models.generateContent({ ..., config: { abortSignal } })`.
+ *
+ * On timeout the rejection message tells the user which stage tripped and
+ * which knob to turn — important now that we have both per-stage and
+ * cumulative budgets.
  */
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label} timed out after ${(timeoutMs / 1000).toFixed(0)}s — set DWELL_MODEL_TIMEOUT_MS=<ms> to override`)),
-      timeoutMs,
-    );
-  });
+export async function runWithTimeout<T>(
+  factory: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  label: string,
+  outerSignal?: AbortSignal,
+): Promise<T> {
+  const controller = new AbortController();
+  // Forward an already-aborted outer signal immediately so we never start the
+  // request in the first place.
+  if (outerSignal?.aborted) {
+    controller.abort(outerSignal.reason);
+  }
+  const onOuterAbort = () => controller.abort(outerSignal?.reason);
+  outerSignal?.addEventListener("abort", onOuterAbort, { once: true });
+
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error(`${label} timeout`));
+  }, timeoutMs);
+
   try {
-    return await Promise.race([promise, timeoutPromise]);
+    return await factory(controller.signal);
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(
+        `${label} timed out after ${(timeoutMs / 1000).toFixed(0)}s — ` +
+          `set DWELL_MODEL_TIMEOUT_MS=<ms> to raise the per-stage ceiling`,
+      );
+    }
+    if (outerSignal?.aborted) {
+      throw new Error(
+        `${label} aborted: cumulative model budget exhausted — ` +
+          `raise DWELL_MODEL_TIMEOUT_MS (per-stage) to extend the total`,
+      );
+    }
+    throw err;
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+    outerSignal?.removeEventListener("abort", onOuterAbort);
   }
 }
 
@@ -135,28 +179,31 @@ export async function buildImpression(opts: BuildImpressionOpts): Promise<Impres
     });
   }
 
-  const response = await withTimeout(
-    ai.models.generateContent({
-    model,
-    contents: [{ role: "user", parts }],
-    config: {
-      systemInstruction: SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          firstFiveSeconds: { type: Type.STRING, description: "what arrival is like, 2-4 sentences" },
-          afterExploration: { type: Type.STRING, description: "what the site reveals once you poke at it, 2-4 sentences" },
-          settling: { type: Type.STRING, description: "what the site is like to sit with, 1-3 sentences" },
-          oneSentenceVerdict: { type: Type.STRING, description: "a single sentence — what is this site, in spirit?" },
+  const response = await runWithTimeout(
+    (abortSignal) =>
+      ai.models.generateContent({
+        model,
+        contents: [{ role: "user", parts }],
+        config: {
+          abortSignal,
+          systemInstruction: SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              firstFiveSeconds: { type: Type.STRING, description: "what arrival is like, 2-4 sentences" },
+              afterExploration: { type: Type.STRING, description: "what the site reveals once you poke at it, 2-4 sentences" },
+              settling: { type: Type.STRING, description: "what the site is like to sit with, 1-3 sentences" },
+              oneSentenceVerdict: { type: Type.STRING, description: "a single sentence — what is this site, in spirit?" },
+            },
+            required: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict"],
+            propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict"],
+          },
         },
-        required: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict"],
-        propertyOrdering: ["firstFiveSeconds", "afterExploration", "settling", "oneSentenceVerdict"],
-      },
-    },
-  }),
+      }),
     modelTimeoutMs(),
     "impression generation",
+    opts.signal,
   );
 
   const text = response.text;

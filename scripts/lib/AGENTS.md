@@ -2,13 +2,20 @@
 
 Pure modules used by the entry-point scripts in `scripts/`. Each file does one thing.
 
+All files except `config.ts` are VENDORED copies of the FleetManager template
+(`templates/agents-crawl/lib/`). Do not edit them here — changes flow from
+FleetManager. `VENDOR-MANIFEST.json` records the sha256 of each vendored file;
+the `vendor` check in `../check.ts` fails on any in-repo edit. `config.ts` is
+the per-repo seam and is the only file here that this repo owns.
+
 ## Index
 
 ### Files here
 
 | File | Purpose |
 |---|---|
-| `config.ts` | The single source of truth for what's enforced — required AGENTS.md roots, ignored dirs, forbidden files, freshness threshold, stamp format. |
+| `config.ts` | The single source of truth for what's enforced — required AGENTS.md roots, ignored dirs, forbidden files, freshness threshold, stamp format. Repo-owned. |
+| `VENDOR-MANIFEST.json` | sha256 manifest of the vendored template files; consumed by the `vendor` check. |
 | `walk.ts` | `walkDirs()` — yields one entry per directory under a root, skipping ignored paths. |
 | `git.ts` | Thin wrappers around `git rev-parse`, `git cat-file`, `git diff --name-only`. |
 | `types.ts` | `Finding`, `CheckResult`, `Severity` — the structured report format. |
@@ -39,4 +46,4 @@ Pure modules used by the entry-point scripts in `scripts/`. Each file does one t
 
 ---
 
-<!-- last-reviewed: e2872b9 -->
+<!-- last-reviewed: 0e04ea7 -->

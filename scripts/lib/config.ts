@@ -1,11 +1,13 @@
 /**
  * Per-repo seam for the AGENTS.md crawl infrastructure.
  *
- * The other files in `scripts/lib/` (walk, git, types, check-*) are symlinks
- * back to the FleetManager template at
- * `~/FleetManager/templates/agents-crawl/lib/`. DO NOT edit those — edit this
- * file. The lib files take this config as a parameter; `scripts/check.ts` and
- * `scripts/stamp.ts` thread it through each call.
+ * The other files in `scripts/lib/` (walk, git, types, check-*) are VENDORED
+ * copies of the FleetManager template at
+ * `~/FleetManager/templates/agents-crawl/lib/` (see VENDOR-MANIFEST.json).
+ * DO NOT edit those — edit this file. Changes to the vendored files flow from
+ * FleetManager; the `vendor` check in `scripts/check.ts` fails on in-repo
+ * edits. The lib files take this config as a parameter; `scripts/check.ts`
+ * and `scripts/stamp.ts` thread it through each call.
  *
  * `satisfies CrawlConfig` ensures any drift from the template's contract
  * fails typecheck immediately.

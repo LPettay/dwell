@@ -8,7 +8,7 @@ Repo-hygiene tooling. The single command `bun run check` reports every violation
 
 | File | Purpose |
 |---|---|
-| `check.ts` | Entry point. Orchestrates `presence`, `forbidden`, and `freshness` checks, prints a structured report. |
+| `check.ts` | Entry point. Orchestrates `presence`, `forbidden`, `freshness`, and `vendor` checks, prints a structured report. |
 | `stamp.ts` | Marks an `AGENTS.md` (or all of them) as reviewed at the current HEAD SHA. |
 
 ### Subdirectories

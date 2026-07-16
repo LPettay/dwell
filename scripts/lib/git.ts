@@ -1,3 +1,4 @@
+// VENDORED from FleetManager templates/agents-crawl/lib — do not edit here; changes flow from FleetManager (see scripts/lib/VENDOR-MANIFEST.json)
 import { spawnSync } from "node:child_process";
 
 /** Returns true iff the repo has a HEAD ref (i.e. at least one commit). */

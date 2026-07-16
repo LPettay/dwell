@@ -13,14 +13,17 @@
  *   2  — bad invocation
  */
 
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { config } from "./lib/config.ts";
 import { checkPresence } from "./lib/check-presence.ts";
 import { checkForbidden } from "./lib/check-forbidden.ts";
 import { checkFreshness } from "./lib/check-freshness.ts";
 import type { CheckResult, Finding } from "./lib/types.ts";
 
-type CheckId = "presence" | "forbidden" | "freshness";
-const ALL: CheckId[] = ["presence", "forbidden", "freshness"];
+type CheckId = "presence" | "forbidden" | "freshness" | "vendor";
+const ALL: CheckId[] = ["presence", "forbidden", "freshness", "vendor"];
 
 function parseArgs(argv: string[]): { only: CheckId[]; verbose: boolean } {
   let only: CheckId[] = ALL;
@@ -47,14 +50,42 @@ function parseArgs(argv: string[]): { only: CheckId[]; verbose: boolean } {
   return { only, verbose };
 }
 
+/**
+ * Vendored-lib self-consistency: every file in scripts/lib/ listed in
+ * VENDOR-MANIFEST.json must hash to its recorded sha256. Catches in-repo
+ * edits of vendored files (fork drift). Cross-repo drift against the
+ * FleetManager template is oversight's job, not this check's.
+ */
+function checkVendor(repoRoot: string): CheckResult {
+  const findings: Finding[] = [];
+  const libDir = join(repoRoot, "scripts", "lib");
+  const manifest = JSON.parse(
+    readFileSync(join(libDir, "VENDOR-MANIFEST.json"), "utf8"),
+  ) as { files: Record<string, string> };
+  for (const [file, expected] of Object.entries(manifest.files)) {
+    const actual = createHash("sha256").update(readFileSync(join(libDir, file))).digest("hex");
+    if (actual !== expected) {
+      findings.push({
+        severity: "error",
+        code: "VENDOR_DRIFT",
+        message: `vendored file does not match its sha256 in VENDOR-MANIFEST.json — vendored lib files must not be edited in this repo`,
+        path: `scripts/lib/${file}`,
+        fix: "revert the edit, or re-vendor from FleetManager templates/agents-crawl/lib and update VENDOR-MANIFEST.json",
+      });
+    }
+  }
+  return { name: "vendor", findings };
+}
+
 function main(): void {
   const { only, verbose } = parseArgs(process.argv);
   const repoRoot = resolve(import.meta.dir, "..");
 
   const results: CheckResult[] = [];
-  if (only.includes("presence")) results.push(checkPresence(repoRoot));
-  if (only.includes("forbidden")) results.push(checkForbidden(repoRoot));
-  if (only.includes("freshness")) results.push(checkFreshness(repoRoot, { verbose }));
+  if (only.includes("presence")) results.push(checkPresence(repoRoot, config));
+  if (only.includes("forbidden")) results.push(checkForbidden(repoRoot, config));
+  if (only.includes("freshness")) results.push(checkFreshness(repoRoot, config, { verbose }));
+  if (only.includes("vendor")) results.push(checkVendor(repoRoot));
 
   printReport(results);
 

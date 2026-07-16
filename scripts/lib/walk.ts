@@ -1,6 +1,7 @@
+// VENDORED from FleetManager templates/agents-crawl/lib — do not edit here; changes flow from FleetManager (see scripts/lib/VENDOR-MANIFEST.json)
 import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { config } from "./config.ts";
+import type { CrawlConfig } from "./types.ts";
 
 export type DirEntry = {
   /** Absolute path to the directory. */
@@ -15,9 +16,13 @@ export type DirEntry = {
 
 /**
  * Walk a directory tree, yielding one entry per directory.
- * Skips anything in {@link config.ignoreDirs}.
+ * Skips anything in `config.ignoreDirs`.
  */
-export function* walkDirs(root: string, repoRoot: string): Generator<DirEntry> {
+export function* walkDirs(
+  root: string,
+  repoRoot: string,
+  config: CrawlConfig,
+): Generator<DirEntry> {
   const stack: string[] = [root];
 
   while (stack.length > 0) {

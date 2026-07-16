@@ -1,21 +1,21 @@
+// VENDORED from FleetManager templates/agents-crawl/lib — do not edit here; changes flow from FleetManager (see scripts/lib/VENDOR-MANIFEST.json)
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
-import { config } from "./config.ts";
 import { walkDirs, dirHasFiles } from "./walk.ts";
-import type { CheckResult, Finding } from "./types.ts";
+import type { CheckResult, CrawlConfig, Finding } from "./types.ts";
 
 /**
- * Layer 2a — every directory under {@link config.agentsRequiredRoots} that
+ * Layer 2a — every directory under `config.agentsRequiredRoots` that
  * contains files must have its own AGENTS.md.
  */
-export function checkPresence(repoRoot: string): CheckResult {
+export function checkPresence(repoRoot: string, config: CrawlConfig): CheckResult {
   const findings: Finding[] = [];
 
   for (const root of config.agentsRequiredRoots) {
     const abs = join(repoRoot, root);
     if (!existsSync(abs)) continue;
 
-    for (const entry of walkDirs(abs, repoRoot)) {
+    for (const entry of walkDirs(abs, repoRoot, config)) {
       if (!dirHasFiles(entry)) continue;
 
       const agentsPath = join(entry.abs, "AGENTS.md");

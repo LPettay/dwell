@@ -1,13 +1,13 @@
+// VENDORED from FleetManager templates/agents-crawl/lib — do not edit here; changes flow from FleetManager (see scripts/lib/VENDOR-MANIFEST.json)
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
-import { config, parseStamp } from "./config.ts";
 import { walkDirs } from "./walk.ts";
 import { changedFilesIn, shaExists, hasHead } from "./git.ts";
-import type { CheckResult, Finding } from "./types.ts";
+import type { CheckResult, CrawlConfig, Finding } from "./types.ts";
 
 /**
  * Layer 5 — every AGENTS.md carries a `<!-- last-reviewed: SHA -->` footer.
- * If more than {@link config.freshnessThreshold} files in its directory have
+ * If more than `config.freshnessThreshold` files in its directory have
  * changed since that SHA (excluding the AGENTS.md itself), the doc is stale
  * and must be re-reviewed and re-stamped.
  *
@@ -16,7 +16,11 @@ import type { CheckResult, Finding } from "./types.ts";
  * nothing to compare against, and missing stamps are about to be filled in
  * by `bun run agents:stamp-all` immediately after the first commit.
  */
-export function checkFreshness(repoRoot: string, opts: { verbose?: boolean } = {}): CheckResult {
+export function checkFreshness(
+  repoRoot: string,
+  config: CrawlConfig,
+  opts: { verbose?: boolean } = {},
+): CheckResult {
   const findings: Finding[] = [];
   const bootstrap = !hasHead();
   const sev = (real: "error" | "warn"): "error" | "warn" => (bootstrap ? "warn" : real);
@@ -27,7 +31,7 @@ export function checkFreshness(repoRoot: string, opts: { verbose?: boolean } = {
   for (const root of config.agentsRequiredRoots) {
     const abs = join(repoRoot, root);
     if (!existsSync(abs)) continue;
-    for (const entry of walkDirs(abs, repoRoot)) {
+    for (const entry of walkDirs(abs, repoRoot, config)) {
       const agentsPath = join(entry.abs, "AGENTS.md");
       if (existsSync(agentsPath)) targets.push(agentsPath);
     }
@@ -35,7 +39,7 @@ export function checkFreshness(repoRoot: string, opts: { verbose?: boolean } = {
 
   for (const agentsPath of targets) {
     const content = readFileSync(agentsPath, "utf8");
-    const sha = parseStamp(content);
+    const sha = parseStamp(content, config);
     const relAgents = relative(repoRoot, agentsPath);
     const relDir = dirname(relAgents) || ".";
 
@@ -78,4 +82,23 @@ export function checkFreshness(repoRoot: string, opts: { verbose?: boolean } = {
   }
 
   return { name: "freshness", findings };
+}
+
+/**
+ * Parse a `<!-- last-reviewed: SHA -->` footer out of an AGENTS.md body using
+ * the consumer's configured marker. Kept lib-local so consumers don't need to
+ * export a `parseStamp` helper from their config — `stampPrefix`/`stampSuffix`
+ * are sufficient.
+ */
+function parseStamp(content: string, config: CrawlConfig): string | null {
+  const re = new RegExp(
+    `${escapeRe(config.stampPrefix)}\\s*([0-9a-f]{7,40})\\s*${escapeRe(config.stampSuffix)}`,
+    "i",
+  );
+  const match = re.exec(content);
+  return match?.[1] ?? null;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

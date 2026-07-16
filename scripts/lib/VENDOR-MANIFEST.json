@@ -1,0 +1,12 @@
+{
+  "source": "FleetManager templates/agents-crawl/lib",
+  "vendored": "2026-07-15",
+  "files": {
+    "check-forbidden.ts": "fe9cada96ee6940195c1a7a183df1aba324acf6195de13b83b1615f15c96b4fd",
+    "check-freshness.ts": "f30c37007f063ac79a732d8e5417833e56e7721fb5c274358acbc20db4756198",
+    "check-presence.ts": "961815adb8ced3d44ef6883287a3eedc251bc5c837a3badbb1463366abb7df87",
+    "git.ts": "50f0f13d539e280f8657dbd3ac9815ec000c9dd3cb13ee8f50b52fb83af9857f",
+    "types.ts": "0673f77e0f2ba85107df9245d2786ecfcb0c5b0cdb32c4b3f3dbbbd1f55dedd2",
+    "walk.ts": "9b874ea4be33d07e5816ffbcac94595a2046b7edac0504d775cf2e077b0f2e5a"
+  }
+}

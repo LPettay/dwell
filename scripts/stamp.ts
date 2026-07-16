@@ -64,7 +64,7 @@ function findAllAgentsMd(repoRoot: string): string[] {
   for (const root of config.agentsRequiredRoots) {
     const abs = join(repoRoot, root);
     if (!existsSync(abs)) continue;
-    for (const entry of walkDirs(abs, repoRoot)) {
+    for (const entry of walkDirs(abs, repoRoot, config)) {
       const agentsPath = join(entry.abs, "AGENTS.md");
       if (existsSync(agentsPath)) found.push(agentsPath);
     }

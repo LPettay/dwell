@@ -1,7 +1,7 @@
+// VENDORED from FleetManager templates/agents-crawl/lib — do not edit here; changes flow from FleetManager (see scripts/lib/VENDOR-MANIFEST.json)
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { config } from "./config.ts";
-import type { CheckResult, Finding } from "./types.ts";
+import type { CheckResult, CrawlConfig, Finding } from "./types.ts";
 
 /**
  * Layer 2c — forbidden artifacts must not exist at the repo root.
@@ -9,7 +9,7 @@ import type { CheckResult, Finding } from "./types.ts";
  * These are typically lockfiles from the wrong package manager or stray
  * `.env` files that shouldn't be committed.
  */
-export function checkForbidden(repoRoot: string): CheckResult {
+export function checkForbidden(repoRoot: string, config: CrawlConfig): CheckResult {
   const findings: Finding[] = [];
 
   for (const file of config.forbiddenFiles) {
